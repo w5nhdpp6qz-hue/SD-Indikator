@@ -2494,10 +2494,9 @@ nav {
 }
 .apex-btn:active { transform: translateY(0); box-shadow: none; }
 
-/* ── Kill mobile bottom nav (desktop app) ── */
-#mobileBottomNav { display: none !important; }
+/* ── Mobile: ensure pages aren't obscured by bottom nav ── */
 @media (max-width: 700px) {
-  .page { padding-bottom: 2rem !important; }
+  .page { padding-bottom: 80px !important; }
 }
 </style>
 
