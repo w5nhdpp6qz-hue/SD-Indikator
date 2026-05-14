@@ -9151,11 +9151,11 @@ function initChart() {
     timeScale: { borderColor:'#1e1e1e', timeVisible:true, secondsVisible:false },
     handleScroll: true, handleScale: true
   });
-  lwCandles = lwChart.addSeries(LightweightCharts.CandlestickSeries, {
+  lwCandles = lwChart.addCandlestickSeries({
   upColor:'#26a69a', downColor:'#ef5350',
   wickUpColor:'#26a69a', wickDownColor:'#ef5350',
   borderVisible:false
-  });
+});
 
   // Crosshair price display
   lwChart.subscribeCrosshairMove(function(param) {
