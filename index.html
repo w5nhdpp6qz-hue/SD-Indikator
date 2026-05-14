@@ -8658,14 +8658,16 @@ function injectExportButtons() {
 //  SD ZONES PRO — EMBEDDED (adapted from sd-zones.html)
 // ═══════════════════════════════════════════════════════════════
 
+const TWELVE_API_KEY = '267ea35b60094208bd0402408fe8c7d8';
+
 const SYMBOL_MAP = {
-  XAUUSD:  { src:'yahoo', ticker:'GC=F',       decimals:2,  pip:0.01,   label:'Gold / USD',     pipLabel:'pts'   },
-  EURUSD:  { src:'yahoo', ticker:'EURUSD=X',   decimals:5,  pip:0.00001,label:'EUR / USD',       pipLabel:'pips'  },
-  GBPUSD:  { src:'yahoo', ticker:'GBPUSD=X',   decimals:5,  pip:0.00001,label:'GBP / USD',       pipLabel:'pips'  },
-  NAS100:  { src:'yahoo', ticker:'NQ=F',        decimals:1,  pip:0.1,    label:'NAS100 Futures', pipLabel:'pts'   },
-  US100:   { src:'yahoo', ticker:'^NDX',        decimals:2,  pip:0.01,   label:'US100 / NDX',    pipLabel:'pts'   },
-  BTCUSD:  { src:'binance',ticker:'BTCUSDT',   decimals:2,  pip:0.01,   label:'BTC / USDT',     pipLabel:'ticks' },
-  ETHUSDT: { src:'binance',ticker:'ETHUSDT',   decimals:2,  pip:0.01,   label:'ETH / USDT',     pipLabel:'ticks' }
+  XAUUSD:  { src:'twelve', ticker:'XAU/USD',    decimals:2,  pip:0.01,   label:'Gold / USD',     pipLabel:'pts'   },
+  EURUSD:  { src:'twelve', ticker:'EUR/USD',     decimals:5,  pip:0.00001,label:'EUR / USD',       pipLabel:'pips'  },
+  GBPUSD:  { src:'twelve', ticker:'GBP/USD',     decimals:5,  pip:0.00001,label:'GBP / USD',       pipLabel:'pips'  },
+  NAS100:  { src:'twelve', ticker:'NQ1!',        decimals:1,  pip:0.1,    label:'NAS100 Futures', pipLabel:'pts'   },
+  US100:   { src:'twelve', ticker:'NDX',         decimals:2,  pip:0.01,   label:'US100 / NDX',    pipLabel:'pts'   },
+  BTCUSD:  { src:'binance',ticker:'BTCUSDT',     decimals:2,  pip:0.01,   label:'BTC / USDT',     pipLabel:'ticks' },
+  ETHUSDT: { src:'binance',ticker:'ETHUSDT',     decimals:2,  pip:0.01,   label:'ETH / USDT',     pipLabel:'ticks' }
 };
 const TF_TO_BINANCE = { 1:'1m',5:'5m',15:'15m',30:'30m',60:'1h',240:'4h',1440:'1d' };
 const TF_TO_YAHOO   = { 1:'1m',5:'5m',15:'15m',30:'30m',60:'60m',240:'1h',1440:'1d' };
@@ -8698,7 +8700,7 @@ async function fetchCandles(symbol, tf, limit) {
   var info = SYMBOL_MAP[symbol];
   if (!info) throw new Error('Unknown symbol: ' + symbol);
   if (info.src === 'binance') return fetchBinance(info.ticker, tf, limit);
-  return fetchYahoo(info.ticker, tf, limit);
+  return fetchTwelveData(info.ticker, tf, limit);
 }
 
 async function fetchBinance(ticker, tf, limit) {
@@ -8716,12 +8718,11 @@ async function fetchBinance(ticker, tf, limit) {
 async function fetchTwelveData(ticker, tf, limit) {
   var intervalMap = { 1:'1min', 5:'5min', 15:'15min', 30:'30min', 60:'1h', 240:'4h', 1440:'1day' };
   var interval = intervalMap[tf] || '15min';
-  var apiKey = '267ea35b60094208bd0402408fe8c7d8';
 
-  var url = 'https://api.twelvedata.com/time_series?symbol=' + ticker +
+  var url = 'https://api.twelvedata.com/time_series?symbol=' + encodeURIComponent(ticker) +
     '&interval=' + interval +
     '&outputsize=' + Math.min(limit, 5000) +
-    '&apikey=' + apiKey;
+    '&apikey=' + TWELVE_API_KEY;
 
   var r = await fetch(url);
   if (!r.ok) throw new Error('TwelveData HTTP ' + r.status);
@@ -8747,6 +8748,7 @@ async function fetchTwelveData(ticker, tf, limit) {
 async function fetchYahoo(ticker, tf, limit) {
   return fetchTwelveData(ticker, tf, limit);
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 //  SECTION 3 — ZONE DETECTION ENGINE
