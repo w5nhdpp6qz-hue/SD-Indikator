@@ -8860,21 +8860,17 @@ function detectZones(data, atr, swingLen) {
       var candle = data[ci];
       var cl = candle.close;
 
-      if (zone.type === 'Supply') {
-        if (cl > zone.top) {
-          zone.closeBeyondCount++;
-          if (zone.closeBeyondCount >= closeInvalidBars) { zone.broken = true; break; }
-        } else if (cl < zone.bottom) {
-          zone.closeBeyondCount = 0;
-        }
-      } else {
-        if (cl < zone.bottom) {
-          zone.closeBeyondCount++;
-          if (zone.closeBeyondCount >= closeInvalidBars) { zone.broken = true; break; }
-        } else if (cl > zone.top) {
-          zone.closeBeyondCount = 0;
-        }
-      }
+     if (zone.type === 'Supply') {
+  if (cl > zone.top) {
+    zone.closeBeyondCount++;
+    if (zone.closeBeyondCount >= closeInvalidBars) { zone.broken = true; break; }
+  }
+} else {
+  if (cl < zone.bottom) {
+    zone.closeBeyondCount++;
+    if (zone.closeBeyondCount >= closeInvalidBars) { zone.broken = true; break; }
+  }
+}
 
       // Retest
       var bodyH  = Math.max(candle.open, candle.close);
