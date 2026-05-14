@@ -4163,7 +4163,7 @@ async function _doRegister() {
     }
 
     const cred = await auth.createUserWithEmailAndPassword(email, pw);
-    await db.collection('apexUsers').doc(cred.user.uid).set({
+   await db.collection('apexUsers').doc(cred.user.uid).set({
       username:           name,
       email:              email,
       totalTrades:        0,
@@ -4176,6 +4176,8 @@ async function _doRegister() {
       profileVisibility:  'everyone',
       dmVisibility:       'everyone',
       dmEnabled:          true,
+      subscriptionActive: false,
+      subscriptionExpiry: null,
       createdAt:          firebase.firestore.FieldValue.serverTimestamp(),
       lastUpdated:        firebase.firestore.FieldValue.serverTimestamp()
     });
