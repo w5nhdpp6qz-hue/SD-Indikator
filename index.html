@@ -8717,8 +8717,7 @@ async function fetchYahoo(ticker, tf, limit) {
     encodeURIComponent(ticker) +
     '?interval=' + interval + '&range=' + range + '&includePrePost=false';
 
-  var url = 'https://jzindikators.4kjyyyftv6.workers.dev/?url=' + encodeURIComponent(yahooUrl);
-
+  var url = 'https://tight-morning-ec09.4kjyyyftv6.workers.dev/?url=' + encodeURIComponent(yahooUrl);
   var r = await fetch(url);
   if (!r.ok) throw new Error('Yahoo HTTP ' + r.status);
   var j = await r.json();
