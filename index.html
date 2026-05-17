@@ -11479,6 +11479,301 @@ function setCoachBusy(busy) {
     if (input)   input.disabled   = true;
   }
 }
+// ══════════════════════════════════════
+//  AUTO TRADE ANALYSE
+// ══════════════════════════════════════
+
+// CSS für das Analyse-Panel (einmalig einfügen)
+(function injectTradeAnalyseStyles() {
+  if (document.getElementById('trade-analyse-styles')) return;
+  var style = document.createElement('style');
+  style.id = 'trade-analyse-styles';
+  style.textContent = `
+    #tradeAnalysePanel {
+      position: fixed;
+      bottom: 90px;
+      right: 24px;
+      width: 340px;
+      max-height: 420px;
+      background: var(--card);
+      border: 0.5px solid var(--rim);
+      border-radius: var(--r-lg, 16px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      animation: slideUpPanel 0.22s ease;
+    }
+    @keyframes slideUpPanel {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    #tradeAnalysePanel.open { display: flex; }
+    #tradeAnalyseHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px 10px;
+      border-bottom: 0.5px solid var(--rim);
+      flex-shrink: 0;
+    }
+    #tradeAnalyseHeader span {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink1);
+      letter-spacing: 0.02em;
+    }
+    #tradeAnalyseClose {
+      background: var(--elevated);
+      border: 0.5px solid var(--rim);
+      color: var(--ink2);
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #tradeAnalyseBody {
+      padding: 14px;
+      overflow-y: auto;
+      flex: 1;
+      font-size: 12.5px;
+      color: var(--ink2);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    #tradeAnalyseBody.loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--ink3);
+      font-size: 12px;
+    }
+    .ta-spinner {
+      width: 16px; height: 16px;
+      border: 2px solid var(--rim);
+      border-top-color: var(--accent, #6c63ff);
+      border-radius: 50%;
+      animation: taSpin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes taSpin { to { transform: rotate(360deg); } }
+    #tradeAnalyseFooter {
+      padding: 10px 14px;
+      border-top: 0.5px solid var(--rim);
+      flex-shrink: 0;
+      display: flex;
+      gap: 8px;
+    }
+    #tradeAnalyseSendBtn {
+      flex: 1;
+      background: var(--accent, #6c63ff);
+      color: #fff;
+      border: none;
+      border-radius: var(--r-md, 10px);
+      padding: 8px 12px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+    }
+    #tradeAnalyseSendBtn:hover { opacity: 0.88; }
+    #tradeAnalyseOpenCoach {
+      background: var(--elevated);
+      border: 0.5px solid var(--rim);
+      color: var(--ink2);
+      border-radius: var(--r-md, 10px);
+      padding: 8px 12px;
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+// Panel HTML einmalig ins DOM einfügen
+(function injectTradeAnalysePanel() {
+  if (document.getElementById('tradeAnalysePanel')) return;
+  var panel = document.createElement('div');
+  panel.id = 'tradeAnalysePanel';
+  panel.innerHTML = `
+    <div id="tradeAnalyseHeader">
+      <span>🤖 APEX COACH — Trade Analyse</span>
+      <button id="tradeAnalyseClose" onclick="closeTradeAnalysePanel()">✕</button>
+    </div>
+    <div id="tradeAnalyseBody">Analyse wird geladen...</div>
+    <div id="tradeAnalyseFooter">
+      <button id="tradeAnalyseOpenCoach" onclick="closeTradeAnalysePanel();nav('coach')">💬 Coach öffnen</button>
+      <button id="tradeAnalyseSendBtn" onclick="retryTradeAnalyse()">🔄 Nochmal analysieren</button>
+    </div>
+  `;
+  document.body.appendChild(panel);
+})();
+
+function closeTradeAnalysePanel() {
+  var panel = document.getElementById('tradeAnalysePanel');
+  if (panel) panel.classList.remove('open');
+}
+
+// Letzter analysierter Trade (für Retry)
+var _lastAnalysedTrade = null;
+
+function retryTradeAnalyse() {
+  if (_lastAnalysedTrade) {
+    runTradeAnalyse(_lastAnalysedTrade);
+  }
+}
+
+// Hauptfunktion — wird nach saveTradeEdit() aufgerufen
+async function runTradeAnalyse(trade) {
+  if (!trade) return;
+
+  // Nur analysieren wenn genug Daten vorhanden
+  var hasPips   = trade.pips !== '' && trade.pips !== undefined && trade.pips !== null;
+  var hasSymbol = trade.symbol && trade.symbol.trim() !== '';
+  if (!hasPips && !hasSymbol) return; // leerer Trade — nicht analysieren
+
+  _lastAnalysedTrade = trade;
+
+  // Panel öffnen + Ladezustand
+  var panel = document.getElementById('tradeAnalysePanel');
+  var body  = document.getElementById('tradeAnalyseBody');
+  if (!panel || !body) return;
+
+  panel.classList.add('open');
+  body.className = 'loading';
+  body.innerHTML = '<div class="ta-spinner"></div> Coach analysiert deinen Trade...';
+
+  // Alle historischen Trades für Kontext
+  var allTrades = (typeof getAllTrades === 'function') ? getAllTrades() : [];
+  var valid = allTrades.filter(function(t) { return t.pips !== '' && t.pips !== undefined; });
+  var wins  = valid.filter(function(t) { return parseFloat(t.pips) > 0; });
+  var wr    = valid.length ? Math.round(wins.length / valid.length * 100) : null;
+
+  // Setup-Stats für dieses spezifische Setup
+  var setupName = trade.setup || 'Unknown';
+  var setupTrades = valid.filter(function(t) { return t.setup === setupName; });
+  var setupWins   = setupTrades.filter(function(t) { return parseFloat(t.pips) > 0; });
+  var setupWR     = setupTrades.length ? Math.round(setupWins.length / setupTrades.length * 100) : null;
+
+  // Prompt aufbauen
+  var tradeContext = [
+    'DIESER TRADE (gerade abgeschlossen):',
+    '- Symbol: '  + (trade.symbol  || '—'),
+    '- Richtung: '+ (trade.dir     || '—'),
+    '- Setup: '   + (trade.setup   || '—'),
+    '- Session: ' + (trade.session || '—'),
+    '- Timeframe: '+ (trade.tf     || '—'),
+    '- Entry: '   + (trade.entry   || '—'),
+    '- SL: '      + (trade.sl      || '—'),
+    '- TP: '      + (trade.tp      || '—'),
+    '- Exit: '    + (trade.exit    || '—'),
+    '- Pips: '    + (trade.pips    || '—'),
+    '- R:R: '     + (trade.rr      || '—'),
+    '- Grade: '   + (trade.grade   || '—'),
+    '- Fehler: '  + ((trade.mistakes && trade.mistakes.length) ? trade.mistakes.join(', ') : 'keine'),
+    '- Positives: '+ ((trade.positives && trade.positives.length) ? trade.positives.join(', ') : 'keine'),
+    '- Notiz: '   + (trade.note    || '—'),
+    '',
+    'HISTORISCHER KONTEXT:',
+    '- Gesamt-Trades analysiert: ' + allTrades.length,
+    '- Gesamt Win-Rate: ' + (wr !== null ? wr + '%' : 'keine Daten'),
+    '- Setup "' + setupName + '" — ' + setupTrades.length + ' Trades, ' + (setupWR !== null ? setupWR + '% WR' : 'keine WR-Daten'),
+  ].join('\n');
+
+  var prompt = tradeContext + '\n\nBitte analysiere diesen einzelnen Trade. Fokussiere dich NUR auf diesen Trade — kein allgemeiner Gesamtüberblick. Antworte in maximal 5-6 kurzen Sätzen.';
+
+  try {
+    var res = await fetch(COACH_WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.uid : 'guest',
+        system: 'Trade Analyse',
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) throw new Error('Status ' + res.status);
+    var data = await res.json();
+
+    var reply = '';
+    if (data.response) {
+      reply = data.response;
+    } else if (data.choices && data.choices[0] && data.choices[0].message) {
+      reply = data.choices[0].message.content;
+    } else {
+      reply = '⚠ Unerwartetes Antwortformat vom Coach.';
+    }
+
+    body.className = '';
+    body.textContent = reply;
+
+  } catch(e) {
+    body.className = '';
+    body.textContent = '⚠ Verbindungsfehler: ' + e.message + '\n\nPrüfe deine Internetverbindung oder versuche es erneut.';
+  }
+}
+
+// saveTradeEdit überschreiben — Analyse nach jedem Speichern
+(function patchSaveTradeEditForAnalyse() {
+  var _origSave = window.saveTradeEdit;
+  window.saveTradeEdit = function() {
+    // Zuerst original ausführen (speichert den Trade)
+    if (_origSave) _origSave.apply(this, arguments);
+
+    // Trade-Daten nach dem Speichern auslesen
+    setTimeout(function() {
+      try {
+        if (typeof editKey !== 'undefined' && editKey !== null &&
+            typeof editIdx !== 'undefined' && editIdx !== null) {
+          // editKey/editIdx sind nach closeTradeEdit() gecleared — direkt aus journalData lesen
+          // Stattdessen: letzten Trade des aktuellen Tages nehmen falls editKey bereits null
+          var key = (typeof currentJournalKey !== 'undefined') ? currentJournalKey : null;
+          if (key && journalData[key]) {
+            // Den zuletzt gespeicherten Trade nehmen
+            var trades = journalData[key].trades;
+            if (trades && trades.length > 0) {
+              // Finde den Trade der gerade editiert wurde (anhand des Inhalts)
+              var t = trades[trades.length - 1]; // Fallback: letzter Trade
+              runTradeAnalyse(t);
+            }
+          }
+        }
+      } catch(e) {
+        console.warn('Auto-Analyse Fehler:', e);
+      }
+    }, 300);
+  };
+})();
+
+// Auch nach direktem updateTrade (Inline-Felder) — mit Debounce
+var _analyseDebounce = null;
+var _origUpdateTrade = window.updateTrade;
+window.updateTrade = function(i, field, val) {
+  if (_origUpdateTrade) _origUpdateTrade.apply(this, arguments);
+
+  // Nur triggern wenn Exit oder Pips eingetragen werden (Trade abgeschlossen)
+  if (field === 'pips' || field === 'exit') {
+    clearTimeout(_analyseDebounce);
+    _analyseDebounce = setTimeout(function() {
+      try {
+        var key = (typeof currentJournalKey !== 'undefined') ? currentJournalKey : null;
+        if (key && journalData[key] && journalData[key].trades[i]) {
+          var t = journalData[key].trades[i];
+          // Nur analysieren wenn Pips wirklich eingetragen
+          if (t.pips !== '' && t.pips !== undefined && t.pips !== null && t.pips !== '0') {
+            runTradeAnalyse(t);
+          }
+        }
+      } catch(e) {
+        console.warn('Auto-Analyse updateTrade Fehler:', e);
+      }
+    }, 2000); // 2 Sekunden warten nachdem der User aufgehört hat zu tippen
+  }
+};
 </script>
 </body>
 </html>
