@@ -11273,7 +11273,6 @@ function buildCoachContext() {
 async function sendCoachMsg() {
   if (coachBusy) return;
 
-  // SICHERHEITS-CHECK: Falls coachMessages auf der Seite nicht existiert, erstellen wir es hier einfach!
   if (typeof coachMessages === 'undefined') {
     window.coachMessages = [];
   }
@@ -11288,6 +11287,12 @@ async function sendCoachMsg() {
   setCoachBusy(true);
 
   coachMessages.push({ role: 'user', content: text });
+
+  // NEU: Wenn die Historie zu lang wird, löschen wir die ältesten Nachrichten.
+  // Das verhindert, dass die Nachricht zu groß für das kostenlose Limit wird!
+  if (coachMessages.length > 10) {
+    coachMessages = coachMessages.slice(-10);
+  }
 
   try {
     var res = await fetch(COACH_WORKER_URL, {
@@ -11325,6 +11330,67 @@ async function sendCoachMsg() {
   }
 
   setCoachBusy(false);
+}async function sendCoachMsg() {
+  if (coachBusy) return;
+
+  if (typeof coachMessages === 'undefined') {
+    window.coachMessages = [];
+  }
+
+  var input = document.getElementById('coachInput');
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+
+  appendCoachMsg('user', text);
+  input.value = '';
+  setCoachBusy(true);
+
+  coachMessages.push({ role: 'user', content: text });
+
+  // NEU: Wenn die Historie zu lang wird, löschen wir die ältesten Nachrichten.
+  // Das verhindert, dass die Nachricht zu groß für das kostenlose Limit wird!
+  if (coachMessages.length > 10) {
+    coachMessages = coachMessages.slice(-10);
+  }
+
+  try {
+    var res = await fetch(COACH_WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: currentUser ? currentUser.uid : 'guest',
+        system: "Trading Coach",
+        messages: coachMessages
+      })
+    });
+
+    if (!res.ok) {
+      var errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Server-Fehler (Status ' + res.status + ')');
+    }
+
+    var data = await res.json();
+    
+    var reply = '';
+    if (data.response) {
+      reply = data.response; 
+    } else if (data.choices && data.choices[0] && data.choices[0].message) {
+      reply = data.choices[0].message.content; 
+    } else {
+      reply = '🤖 Fehler: Unerwartetes Format vom Server.';
+    }
+
+    coachMessages.push({ role: 'assistant', content: reply });
+    appendCoachMsg('coach', reply);
+
+  } catch(e) {
+    console.error("Coach-Fehler:", e);
+    appendCoachMsg('coach', '⚠ Fehler bei der Verbindung:\n' + e.message);
+  }
+
+  setCoachBusy(false);
+}
 }
 function coachQuick(text) {
   var input = document.getElementById('coachInput');
