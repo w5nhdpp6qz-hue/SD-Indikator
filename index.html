@@ -11489,11 +11489,21 @@ function setCoachBusy(busy) {
   style.id = 'trade-analyse-styles';
   style.textContent = `
     #tradeAnalysePanel {
-      position: fixed;
-      bottom: 90px;
-      right: 24px;
-      width: 340px;
-      max-height: 420px;
+  position: fixed;
+  bottom: 80px;
+  right: 12px;
+  left: 12px;
+  width: auto;
+  max-height: 55vh;
+  @media (min-width: 480px) {
+  #tradeAnalysePanel {
+    left: auto;
+    width: 340px;
+    right: 24px;
+    bottom: 90px;
+    max-height: 420px;
+  }
+}
       background: #111519;
       border: 0.5px solid rgba(201,168,76,0.28);
       border-radius: 16px;
