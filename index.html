@@ -11270,35 +11270,60 @@ function buildCoachContext() {
   ].join('\n');
 }
 
-async function sendCoachMsg() {
-  // 1. Wenn die Funktion gerade arbeitet ODER im Cooldown ist, blockieren wir JEDE Anfrage sofort
-  if (coachBusy) return;
-  if (window.coachLocalCooldown) {
-    console.log("🤖 Dauerfeuer abgefangen: Funktion ist für 10 Sekunden gesperrt.");
+async function sendCoachMsg(isManual) {
+  // Wenn der Aufruf NICHT manuell durch dich erfolgt, wird er SOFORT blockiert!
+  if (!isManual) {
+    console.log("🤖 Automatischer Hintergrund-Aufruf blockiert. Coach antwortet nur auf echte Nachrichten.");
     return;
   }
 
-  if (typeof coachMessages === 'undefined') {
-    window.coachMessages = [];
-  }
+  if (coachBusy) return;
+  if (window.coachLocalCooldown) return;
+
+  if (typeof coachMessages === 'undefined') { window.coachMessages = []; }
 
   var input = document.getElementById('coachInput');
   if (!input) return;
   var text = input.value.trim();
   if (!text) return;
 
+  // 1. Text des Users ganz normal im Chat anzeigen
   appendCoachMsg('user', text);
   input.value = '';
   setCoachBusy(true);
-
-  // 2. Cooldown SOFORT aktivieren, damit kein Hintergrund-Skript direkt nachfeuern kann
   window.coachLocalCooldown = true;
 
-  coachMessages.push({ role: 'user', content: text });
-
-  if (coachMessages.length > 8) {
-    coachMessages = coachMessages.slice(-8);
+  // 2. LIVE-DATEN AUS DEINER FIREBASE REALTIME DATABASE AUSLESEN
+  var firebaseContext = "HINTERGRUND-INFOS ZUM TRADER (LIVE AUS FIREBASE):\n";
+  
+  if (typeof userTradingData !== 'undefined' && userTradingData) {
+    firebaseContext += "- Aktueller Kontostand: " + (userTradingData.balance !== undefined ? userTradingData.balance : "0") + "€\n";
+    firebaseContext += "- Gesamt-Gewinne (Win): " + (userTradingData.win !== undefined ? userTradingData.win : "0") + "€\n";
+    firebaseContext += "- Gesamt-Verluste (Loss): " + (userTradingData.loss !== undefined ? userTradingData.loss : "0") + "€\n";
+    
+    // Wenn Trades vorhanden sind, hängen wir die letzten 3 Trades für den Kontext an
+    if (userTradingData.trades) {
+      try {
+        var tradesArray = Object.values(userTradingData.trades);
+        var lastTrades = tradesArray.slice(-3); // Die letzten 3 Trades
+        firebaseContext += "- Letzte Trades: " + JSON.stringify(lastTrades) + "\n";
+      } catch(e) {
+        firebaseContext += "- Trades konnten nicht formatiert werden.\n";
+      }
+    } else {
+      firebaseContext += "- Noch keine Trades in der Historie.\n";
+    }
+  } else {
+    firebaseContext += "- Keine Live-Daten verfügbar (User-Datenobjekt nicht im Speicher).\n";
   }
+
+  // Wir bauen den Prompt für Gemini zusammen (für den User im Chatfenster unsichtbar)
+  var promptForAi = firebaseContext + "\nFrage des Traders: " + text;
+
+  // Mit Kontext in die Historie pushen
+  coachMessages.push({ role: 'user', content: promptForAi });
+
+  if (coachMessages.length > 8) { coachMessages = coachMessages.slice(-8); }
 
   try {
     var res = await fetch(COACH_WORKER_URL, {
@@ -11327,13 +11352,8 @@ async function sendCoachMsg() {
       reply = '🤖 Fehler: Unerwartetes Format vom Server.';
     }
 
-    // Falls Google trotz allem ein Limit meldet, verlängern wir die Sperre auf 60 Sekunden
-    if (reply.includes("Quota exceeded") || reply.includes("Limit erreicht")) {
-      appendCoachMsg('coach', '⏳ Google-Limit erreicht. Der Chat pausiert jetzt automatisch für 60 Sekunden, um deinen Key freizugeben...');
-      setTimeout(function() {
-        window.coachLocalCooldown = false;
-        appendCoachMsg('coach', '🟢 Bereit! Du kannst jetzt wieder eine Nachricht senden.');
-      }, 60000);
+    if (reply.includes("Quota exceeded") || reply.includes("Limit erreicht") || reply.includes("Spam-Schutz")) {
+      appendCoachMsg('coach', reply);
       setCoachBusy(false);
       return;
     }
@@ -11348,7 +11368,6 @@ async function sendCoachMsg() {
 
   setCoachBusy(false);
 
-  // 3. Nach 10 Sekunden wird die Funktion erst wieder für die nächste Nachricht freigeschaltet
   setTimeout(function() {
     window.coachLocalCooldown = false;
   }, 10000); 
@@ -11357,7 +11376,7 @@ async function sendCoachMsg() {
 function coachQuick(text) {
   var input = document.getElementById('coachInput');
   if (input) { input.value = text; }
-  sendCoachMsg();
+  sendCoachMsg(true); // Schickt die Nachricht korrekt als manuellen Klick ab!
 }
 
 function appendCoachMsg(role, text) {
