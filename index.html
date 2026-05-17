@@ -11271,10 +11271,10 @@ function buildCoachContext() {
 }
 
 async function sendCoachMsg() {
-  // Wenn der Coach beschäftigt ist ODER wegen des Limits blockiert wird, sofort abbrechen!
+  // 1. Wenn die Funktion gerade arbeitet ODER im Cooldown ist, blockieren wir JEDE Anfrage sofort
   if (coachBusy) return;
-  if (window.coachCooldownActive) {
-    console.log("Coach blockiert: Cooldown aktiv.");
+  if (window.coachLocalCooldown) {
+    console.log("🤖 Dauerfeuer abgefangen: Funktion ist für 10 Sekunden gesperrt.");
     return;
   }
 
@@ -11291,11 +11291,13 @@ async function sendCoachMsg() {
   input.value = '';
   setCoachBusy(true);
 
+  // 2. Cooldown SOFORT aktivieren, damit kein Hintergrund-Skript direkt nachfeuern kann
+  window.coachLocalCooldown = true;
+
   coachMessages.push({ role: 'user', content: text });
 
-  // Historie kurz halten, um Token-Stau zu vermeiden
-  if (coachMessages.length > 10) {
-    coachMessages = coachMessages.slice(-10);
+  if (coachMessages.length > 8) {
+    coachMessages = coachMessages.slice(-8);
   }
 
   try {
@@ -11325,13 +11327,15 @@ async function sendCoachMsg() {
       reply = '🤖 Fehler: Unerwartetes Format vom Server.';
     }
 
-    // Wenn die Antwort die Quota-Warnung enthält, aktivieren wir den Notaus-Schalter!
+    // Falls Google trotz allem ein Limit meldet, verlängern wir die Sperre auf 60 Sekunden
     if (reply.includes("Quota exceeded") || reply.includes("Limit erreicht")) {
-      window.coachCooldownActive = true;
+      appendCoachMsg('coach', '⏳ Google-Limit erreicht. Der Chat pausiert jetzt automatisch für 60 Sekunden, um deinen Key freizugeben...');
       setTimeout(function() {
-        window.coachCooldownActive = false;
-        appendCoachMsg('coach', '🟢 System: Das Limit wurde zurückgesetzt. Du kannst den Coach wieder nutzen.');
-      }, 60000); // 60 Sekunden absolute Sperre
+        window.coachLocalCooldown = false;
+        appendCoachMsg('coach', '🟢 Bereit! Du kannst jetzt wieder eine Nachricht senden.');
+      }, 60000);
+      setCoachBusy(false);
+      return;
     }
 
     coachMessages.push({ role: 'assistant', content: reply });
@@ -11339,16 +11343,15 @@ async function sendCoachMsg() {
 
   } catch(e) {
     console.error("Coach-Fehler:", e);
-    var errMsg = e.message;
-    
-    appendCoachMsg('coach', '⚠ Fehler bei der Verbindung:\n' + errMsg);
-
-    // Auch bei Netzwerkfehlern triggern wir zur Sicherheit eine kurze Pause
-    window.coachCooldownActive = true;
-    setTimeout(function() { window.coachCooldownActive = false; }, 10000);
+    appendCoachMsg('coach', '⚠ Fehler bei der Verbindung:\n' + e.message);
   }
 
   setCoachBusy(false);
+
+  // 3. Nach 10 Sekunden wird die Funktion erst wieder für die nächste Nachricht freigeschaltet
+  setTimeout(function() {
+    window.coachLocalCooldown = false;
+  }, 10000); 
 }
 
 function coachQuick(text) {
